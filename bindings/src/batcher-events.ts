@@ -135,6 +135,7 @@ export type DecodedBatcherEvent = BatcherEvent & BatcherEventMeta;
 
 // Import shared RawSorobanEvent from factory-events to avoid duplication
 import type { RawSorobanEvent } from "./factory-events";
+import { normaliseData, resolveSymbol } from "./event-decode";
 
 /**
  * Raw event accepted by {@link decodeBatcherEvent}. A superset of
@@ -457,43 +458,6 @@ function decodeBatcherPayload(
     case "sim_done":
       return { action: known, caller: address(0, "caller"), successCount: u32(1, "successCount") };
   }
-}
-
-/**
- * Normalise the event data into a value list. Tuple payloads arrive as a
- * `Vec`; single-value payloads (`init`, `bat_abort`) arrive as a bare
- * scalar, which is wrapped when `arity` is 1.
- */
-function normaliseData(raw: unknown, arity: number): unknown[] | null {
-  if (raw === null || raw === undefined) return null;
-  if (Array.isArray(raw)) return raw as unknown[];
-
-  if (typeof raw === "object") {
-    const obj = raw as Record<string, unknown>;
-    if (Array.isArray(obj["vec"])) return obj["vec"] as unknown[];
-    if (Array.isArray(obj["_value"])) return obj["_value"] as unknown[];
-  }
-
-  if (typeof raw === "string") {
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed as unknown[];
-    } catch {
-      // Not JSON — fall through to scalar handling.
-    }
-  }
-
-  return arity === 1 ? [raw] : null;
-}
-
-function resolveSymbol(raw: unknown): string | null {
-  if (typeof raw === "string") return raw;
-  if (raw && typeof raw === "object") {
-    const obj = raw as Record<string, unknown>;
-    if (typeof obj["symbol"] === "string") return obj["symbol"];
-    if (typeof obj["sym"] === "string") return obj["sym"];
-  }
-  return null;
 }
 
 function requireAddress(raw: unknown, action: string, field: string, errCtx: ErrCtx): string {

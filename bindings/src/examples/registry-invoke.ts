@@ -64,6 +64,22 @@ export enum RegistryErrorCode {
   WalletExists = "REGISTRY_WALLET_EXISTS",
   WalletNotFound = "REGISTRY_WALLET_NOT_FOUND",
   DependencyUnavailable = "REGISTRY_DEPENDENCY_UNAVAILABLE",
+  InvalidOptions = "REGISTRY_INVALID_OPTIONS",
+}
+
+/**
+ * Typed error thrown by registry-invoke example entrypoints when options
+ * validation fails. Carries a stable {@link RegistryErrorCode} so callers can
+ * fail closed without string matching.
+ */
+export class RegistryInvokeError extends Error {
+  readonly code: RegistryErrorCode;
+
+  constructor(code: RegistryErrorCode, message?: string) {
+    super(message ?? code);
+    this.name = "RegistryInvokeError";
+    this.code = code;
+  }
 }
 
 /**
@@ -91,6 +107,28 @@ export interface NamedWalletRecord {
 export interface NamedWalletOptions {
   correlationId: string;
   idempotencyKey?: string;
+}
+
+/**
+ * Validate named-wallet options before building or submitting a transaction.
+ *
+ * Rejects an empty/whitespace-only `correlationId` and, when present, an
+ * empty/whitespace-only `idempotencyKey`, throwing a typed
+ * {@link RegistryInvokeError} with {@link RegistryErrorCode.InvalidOptions}.
+ */
+export function validateNamedWalletOptions(options: NamedWalletOptions): void {
+  if (!options.correlationId || options.correlationId.trim() === "") {
+    throw new RegistryInvokeError(
+      RegistryErrorCode.InvalidOptions,
+      "correlationId must be a non-empty, non-whitespace string",
+    );
+  }
+  if (options.idempotencyKey !== undefined && options.idempotencyKey.trim() === "") {
+    throw new RegistryInvokeError(
+      RegistryErrorCode.InvalidOptions,
+      "idempotencyKey, when present, must be a non-empty, non-whitespace string",
+    );
+  }
 }
 
 /**
@@ -156,6 +194,7 @@ export async function registerNamedWallet(
   address: string,
   options: NamedWalletOptions
 ): Promise<NamedWalletRecord> {
+  validateNamedWalletOptions(options);
   const config = getNetworkConfig();
   const client = new MuxRegistryClient({
     contractId,
@@ -181,6 +220,7 @@ export async function lookupNamedWallet(
   role: WalletRole,
   options: NamedWalletOptions
 ): Promise<NamedWalletRecord> {
+  validateNamedWalletOptions(options);
   const config = getNetworkConfig();
   const client = new MuxRegistryClient({
     contractId,

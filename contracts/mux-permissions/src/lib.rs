@@ -448,24 +448,31 @@ impl MuxPermissions {
     /// function requires no auth — spam an arbitrary account's audit log with
     /// `perm_den` events for permissions it never held.
     pub fn has_permission(env: Env, account: Address, permission: Symbol) -> bool {
-        let account_roles: Vec<Symbol> = env
-            .storage()
-            .instance()
-            .get(&DataKey::AccountRoles(account.clone()))
-            .unwrap_or_else(|| Vec::new(&env));
-
-        for role in account_roles.iter() {
-            let perms: Vec<Symbol> = env
-                .storage()
-                .instance()
-                .get(&DataKey::RolePermissions(role))
-                .unwrap_or_else(|| Vec::new(&env));
-            if perms.contains(&permission) {
-                emit(&env, symbol_short!("perm_ok"), (account, permission));
-                return true;
-            }
+        if Self::check_permission_inner(&env, &account, &permission) {
+            emit(&env, symbol_short!("perm_ok"), (account, permission));
+            true
+        } else {
+            false
         }
-        false
+    }
+
+    /// Deny-by-default permission check (issue #754, Step 2).
+    ///
+    /// Returns `Ok(())` when the account holds the permission and
+    /// `Err(MuxPermissionsError::Unauthorized)` otherwise — so denials surface
+    /// as typed errors in the call chain rather than a silent boolean.
+    ///
+    /// Read-only: no state mutation, no event emission on either path.
+    pub fn check_permission_strict(
+        env: Env,
+        account: Address,
+        permission: Symbol,
+    ) -> Result<(), MuxPermissionsError> {
+        if Self::check_permission_inner(&env, &account, &permission) {
+            Ok(())
+        } else {
+            Err(MuxPermissionsError::Unauthorized)
+        }
     }
 
     /// Return all roles held by an account.
@@ -621,6 +628,28 @@ impl MuxPermissions {
     }
 
     // ── Private helpers ────────────────────────────────────────────────────────
+
+    /// Check whether an account holds a permission through any of its roles,
+    /// without emitting events. Used by `has_permission` (which emits `perm_ok`
+    /// on success) and `check_permission_strict` (which never emits).
+    fn check_permission_inner(env: &Env, account: &Address, permission: &Symbol) -> bool {
+        let account_roles: Vec<Symbol> = env
+            .storage()
+            .instance()
+            .get(&DataKey::AccountRoles(account.clone()))
+            .unwrap_or_else(|| Vec::new(env));
+        for role in account_roles.iter() {
+            let perms: Vec<Symbol> = env
+                .storage()
+                .instance()
+                .get(&DataKey::RolePermissions(role))
+                .unwrap_or_else(|| Vec::new(env));
+            if perms.contains(&permission) {
+                return true;
+            }
+        }
+        false
+    }
 
     fn require_admin(env: &Env) -> Result<(), MuxPermissionsError> {
         let admin: Address = env

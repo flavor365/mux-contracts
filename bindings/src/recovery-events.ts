@@ -118,6 +118,7 @@ export type RecoveryEvent =
 
 // Import shared RawSorobanEvent from factory-events to avoid duplication
 import type { RawSorobanEvent } from "./factory-events";
+import { normaliseData, resolveAddress, resolveU64 } from "./event-decode";
 
 // ── Parser ─────────────────────────────────────────────────────────────────────
 
@@ -203,51 +204,10 @@ export function parseRecoveryEvent(event: RawSorobanEvent): RecoveryEvent | null
 
 // ── Internal helpers ───────────────────────────────────────────────────────────
 
-function normaliseData(raw: unknown): unknown[] | null {
-  if (Array.isArray(raw)) return raw as unknown[];
-
-  if (raw && typeof raw === "object") {
-    const obj = raw as Record<string, unknown>;
-    if (Array.isArray(obj["vec"])) return obj["vec"] as unknown[];
-    if (Array.isArray(obj["_value"])) return obj["_value"] as unknown[];
-  }
-
-  if (typeof raw === "string") {
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed as unknown[];
-    } catch {
-      // Not JSON — fall through.
-    }
-  }
-
-  return null;
-}
-
 function extractAddressPair(data: unknown[]): [string, string] | [] {
   const [a, b] = data;
   const addr1 = resolveAddress(a);
   const addr2 = resolveAddress(b);
   if (!addr1 || !addr2) return [];
   return [addr1, addr2];
-}
-
-function resolveAddress(raw: unknown): string | null {
-  if (typeof raw === "string" && raw.startsWith("C")) return raw;
-  if (raw && typeof raw === "object") {
-    const obj = raw as Record<string, unknown>;
-    if (typeof obj["address"] === "string") return obj["address"];
-  }
-  return null;
-}
-
-function resolveU64(raw: unknown): string | null {
-  if (typeof raw === "string") return raw;
-  if (typeof raw === "number") return String(raw);
-  if (raw && typeof raw === "object") {
-    const obj = raw as Record<string, unknown>;
-    if (typeof obj["u64"] === "string") return obj["u64"];
-    if (typeof obj["u64"] === "number") return String(obj["u64"]);
-  }
-  return null;
 }
